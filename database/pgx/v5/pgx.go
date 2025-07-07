@@ -3,6 +3,7 @@
 package pgx
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -37,6 +38,7 @@ var (
 	ErrNilConfig      = fmt.Errorf("no config")
 	ErrNoDatabaseName = fmt.Errorf("no database name")
 	ErrNoSchema       = fmt.Errorf("no schema")
+	pgDelimiter       = []byte(";")
 )
 
 type Config struct {
@@ -256,6 +258,7 @@ func (p *Postgres) Run(migration io.Reader) error {
 	if p.config.MultiStatementEnabled {
 		var err error
 		if e := multistmt.Parse(migration, p.config.MultiStmtDelimiter, p.config.MultiStatementMaxSize, func(m []byte) bool {
+			m = bytes.ReplaceAll(m, p.config.MultiStmtDelimiter, pgDelimiter)
 			if err = p.runStatement(m); err != nil {
 				return false
 			}
