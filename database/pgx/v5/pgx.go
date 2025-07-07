@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/atomic"
-
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/golang-migrate/migrate/v4/database/multistmt"
@@ -22,6 +20,7 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"go.uber.org/atomic"
 )
 
 func init() {
@@ -30,8 +29,6 @@ func init() {
 }
 
 var (
-	multiStmtDelimiter = []byte(";")
-
 	DefaultMigrationsTable       = "schema_migrations"
 	DefaultMultiStatementMaxSize = 10 * 1 << 20 // 10 MB
 )
@@ -52,6 +49,7 @@ type Config struct {
 	MigrationsTableQuoted bool
 	MultiStatementEnabled bool
 	MultiStatementMaxSize int
+	MultiStmtDelimiter    []byte
 }
 
 type Postgres struct {
@@ -116,6 +114,10 @@ func WithInstance(instance *sql.DB, config *Config) (database.Driver, error) {
 		} else if len(result) > 2 {
 			return nil, fmt.Errorf("\"%s\" MigrationsTable contains too many dot characters", config.MigrationsTable)
 		}
+	}
+
+	if config.MultiStmtDelimiter == nil {
+		config.MultiStmtDelimiter = []byte(";")
 	}
 
 	conn, err := instance.Conn(context.Background())
@@ -253,7 +255,7 @@ func (p *Postgres) Unlock() error {
 func (p *Postgres) Run(migration io.Reader) error {
 	if p.config.MultiStatementEnabled {
 		var err error
-		if e := multistmt.Parse(migration, multiStmtDelimiter, p.config.MultiStatementMaxSize, func(m []byte) bool {
+		if e := multistmt.Parse(migration, p.config.MultiStmtDelimiter, p.config.MultiStatementMaxSize, func(m []byte) bool {
 			if err = p.runStatement(m); err != nil {
 				return false
 			}
